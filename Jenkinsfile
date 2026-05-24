@@ -5,7 +5,7 @@ pipeline {
             steps{
                 sh """
                     ls -lrt 
-                    cd ansible && ansible -i inventory.ini testing-server -m ping 
+                    cd ansible && ansible -i inventory.ini test-server -m ping 
                      
                 """
 
