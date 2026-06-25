@@ -9,6 +9,7 @@
             services: 
               reactjs-svc: 
                 #image: lyvanna544/jenkins-reactjs-img-ansible:v1.0.8
-                image: "lyvanna544/{{image_name}}"
+                #image: "lyvanna544/{{image_name}}"
+                image: "vannaphom41/{{ image_name }}"
                 ports: 
                   - "3003:80"
