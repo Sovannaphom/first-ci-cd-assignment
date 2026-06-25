@@ -1,0 +1,103 @@
+name: CI/CD Pipeline
+
+# Trigger: "Developers push -> Github" in the diagram
+on:
+  push:
+    branches: [master]
+
+env:
+  IMAGE_NAME: vannaphom41/my-app   # change to match your Docker Hub repo
+
+jobs:
+
+  # ---------- BUILD + TRIVY SCAN ----------
+  build-scan:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.vars.outputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set image tag (commit SHA)
+        id: vars
+        run: echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      # "Build" box in the diagram
+      - name: Build Docker image
+        run: docker build -t $IMAGE_NAME:${{ steps.vars.outputs.tag }} .
+
+      # Save the image so the next job (push) can reuse it without rebuilding
+      - name: Save image as tarball
+        run: docker save $IMAGE_NAME:${{ steps.vars.outputs.tag }} -o image.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: image.tar
+
+      # "Trivy Scan" box in the diagram
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'        # this is the "Pass?" diamond -> fails the job if vulnerabilities found
+
+  # ---------- PUSH TO DOCKER HUB (only runs if Trivy passed) ----------
+  push:
+    needs: build-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load image
+        run: docker load -i image.tar
+
+      - name: Docker Hub login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag and push
+        run: |
+          docker tag $IMAGE_NAME:${{ needs.build-scan.outputs.image_tag }} $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:${{ needs.build-scan.outputs.image_tag }}
+          docker push $IMAGE_NAME:latest
+
+  # ---------- BONUS: CONTINUOUS DEPLOYMENT TO GCE ----------
+  # Comment this whole job out if you're doing the deploy step manually instead.
+  deploy:
+    needs: push
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH into GCE and redeploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GCE_HOST }}          # e.g. 192.168.56.10 or external IP
+          username: ${{ secrets.GCE_USERNAME }}
+          key: ${{ secrets.GCE_SSH_KEY }}
+          script: |
+            docker pull ${{ env.IMAGE_NAME }}:latest
+            docker stop my-app || true
+            docker rm my-app || true
+            docker run -d --name my-app -p 3000:80 ${{ env.IMAGE_NAME }}:latest
+
+  # ---------- TELEGRAM NOTIFICATION ----------
+  notify:
+    needs: [push, deploy]
+    if: always()   # send notification whether deploy succeeded or failed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Telegram message
+        run: |
+          STATUS="${{ needs.deploy.result }}"
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="CI/CD Pipeline finished. Status: $STATUS. Commit: ${{ github.sha }}"
