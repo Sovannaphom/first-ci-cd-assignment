@@ -18,4 +18,6 @@ npm run build
 # serve the build files (running the built application)
 npm install -g serve 
 serve -s build 
+
+Testing GitHub Actions
 ```
