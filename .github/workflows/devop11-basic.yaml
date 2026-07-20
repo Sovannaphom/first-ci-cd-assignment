@@ -11,7 +11,7 @@ jobs:
   environment: DH_ENV
   steps: 
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Version using Git SHA
       run: |
         echo "TAG=${GITHUB_SHA::8}" >> $GITHUB_ENV
