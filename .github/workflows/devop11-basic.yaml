@@ -1,21 +1,21 @@
 # condition ( when to run this ? )
 on: 
   push: 
-    branches: ["masterasdfasfa"]
+    branches: ["master"]
 # tasks ( what are the task that we automate )
 env: 
   DH_IMAGE: devops11-basic-reactjs
 jobs:
  build-and-push: 
   runs-on: ubuntu-latest
-  environment: DH_ENV  
+  environment: DH_ENV
   steps: 
-    - name: Checkout 
+    - name: Checkout
       uses: actions/checkout@v3
     - name: Version using Git SHA
       run: |
         echo "TAG=${GITHUB_SHA::8}" >> $GITHUB_ENV
-    - name: Login to Dockerhub 
+    - name: Login to Dockerhub
       run: |
        echo "${{ secrets.PASSWORD }}" |  docker login -u ${{ secrets.USERNAME }} --password-stdin
   
@@ -87,4 +87,3 @@ jobs:
     - name: Always logout 
       if: always()
       run: docker logout
-
